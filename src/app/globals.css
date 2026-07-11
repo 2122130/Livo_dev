@@ -1,0 +1,485 @@
+@import "tailwindcss";
+
+/* =========================================================
+   BukkenWeb デザインシステム v3（グリーンブランド・全力版）
+   - 基調は深いエメラルド。明るい黄緑（SUUMO系）とは色相を
+     明確に変え、白カード×深緑×淡い色チップで独自の品を出す
+   - ダークモード自動切替は廃止（背景だけ黒くなり白カードが
+     浮く事故の原因だったため。全端末で常にライト固定）
+   ========================================================= */
+
+:root {
+  /* ページ基調色：淡いグリーングレー。カードが「面」として浮く */
+  --background: #f1f5f3;
+  --foreground: #0f172a;
+
+  /* ブランドカラー（深いエメラルドグリーン） */
+  --brand-100: #d1fae5;
+  --brand-200: #a7f3d0;
+  --brand-300: #6ee7b7;
+  --brand-500: #10b981;
+  --brand-600: #059669;
+  --brand-700: #047857;
+  --brand-800: #065f46;
+
+  /* 役割色 */
+  --ok-500: #10b981;
+  --warn-500: #f59e0b;
+  --danger-500: #f43f5e;
+  --danger-600: #e11d48;
+
+  /* 影（緑みのニュートラルを混ぜると「安物のグレー影」にならない） */
+  --shadow-card: 0 1px 2px rgb(15 42 30 / 0.04), 0 4px 16px -4px rgb(15 42 30 / 0.08);
+  --shadow-card-hover: 0 2px 4px rgb(15 42 30 / 0.05), 0 18px 36px -10px rgb(5 150 105 / 0.25);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* =========================================================
+   ベース
+   ========================================================= */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  /* 単色ではなく、四隅にごく淡い緑の光を仕込んだレイヤー背景。
+     一見無地、よく見ると奥行きがある——高級SaaSの定番手法 */
+  background:
+    radial-gradient(1100px 600px at 88% -8%, rgb(16 185 129 / 0.07), transparent 60%),
+    radial-gradient(900px 520px at -12% 108%, rgb(13 148 136 / 0.06), transparent 55%),
+    var(--background);
+  background-attachment: fixed;
+  color: var(--foreground);
+  /* 日本語で最も読みやすいモダンスタック */
+  font-family:
+    var(--font-geist-sans),
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP",
+    "Yu Gothic UI", Meiryo, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* 日本語のカナ・約物を詰めてプロっぽい字面にする */
+  font-feature-settings: "palt";
+  letter-spacing: 0.01em;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 金額・戸数など、数字は桁がタテに揃うと一気に業務システムの風格が出る */
+table, input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* フォーム部品はページのフォントを継承（ブラウザ標準の混在フォント防止） */
+input, select, textarea, button {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+/* スマホ実機対策：入力欄が16px未満だとiOSが勝手に画面ズームする */
+@media (max-width: 767px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* テキスト選択色もブランドに揃える */
+::selection {
+  background: var(--brand-200);
+  color: #064e3b;
+}
+
+/* キーボード操作時のフォーカスリング（アクセシビリティ＝一流の条件） */
+:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* スクロールバー：太いグレーのバーは画面を安っぽくする */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/* =========================================================
+   モーション（メニューカードの入場・注意喚起）
+   ========================================================= */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes softPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(244 63 94 / 0.35); }
+  50%      { box-shadow: 0 0 0 6px rgb(244 63 94 / 0); }
+}
+
+/* 「アニメーションを減らす」設定のユーザーにはきちんと従う */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =========================================================
+   メインメニュー（白カード＋色チップ＋左アクセントバー）
+   ========================================================= */
+
+.menu-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.03em;
+}
+
+.menu-subtitle {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* 日付表示（今日が業務の基準） */
+.menu-date {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--brand-700);
+  background: var(--brand-100);
+  border: 1px solid var(--brand-200);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* --- メニューパネル本体：白カード --------------------------- */
+
+.menu-panel {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  min-height: 7rem;
+  padding: 1.25rem 1.25rem 1.25rem 1.5rem;
+  border-radius: 1.125rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  cursor: pointer;
+  min-width: 0;
+  box-shadow: var(--shadow-card);
+  /* 機能色（左バー・アイコンチップが参照） */
+  --panel-accent: var(--brand-500);
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.8, 0.4, 1),
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+  /* 入場アニメーション（下の nth-child で時間差をつける） */
+  animation: fadeUp 0.35s cubic-bezier(0.2, 0.8, 0.4, 1) both;
+}
+
+.menu-panel:nth-child(1) { animation-delay: 0.02s; }
+.menu-panel:nth-child(2) { animation-delay: 0.07s; }
+.menu-panel:nth-child(3) { animation-delay: 0.12s; }
+.menu-panel:nth-child(4) { animation-delay: 0.17s; }
+
+@media (min-width: 768px) {
+  .menu-panel {
+    min-height: 8.5rem;
+    padding: 1.625rem 1.625rem 1.625rem 1.875rem;
+  }
+}
+
+/* 左端の機能色バー：色で「どの業務か」を覚えられる目印 */
+.menu-panel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 4px;
+  border-radius: 999px;
+  background: var(--panel-accent);
+  opacity: 0.9;
+  transition: top 0.16s ease, bottom 0.16s ease;
+}
+
+/* ホバーで浮き上がり＋緑の縁＋左バーが伸びる（生きている感触） */
+.menu-panel:hover {
+  transform: translateY(-3px);
+  border-color: var(--brand-300);
+  box-shadow: var(--shadow-card-hover);
+}
+.menu-panel:hover::before {
+  top: 14%;
+  bottom: 14%;
+}
+
+.menu-panel:active {
+  transform: translateY(0) scale(0.99);
+  transition-duration: 0.06s;
+}
+
+.menu-panel:focus-visible {
+  outline: 2px solid var(--brand-500);
+  outline-offset: 3px;
+}
+
+/* タッチ端末ではホバー浮遊をオフ（押した感だけ残す） */
+@media (hover: none) {
+  .menu-panel:hover {
+    transform: none;
+    border-color: #e2e8f0;
+    box-shadow: var(--shadow-card);
+  }
+  .menu-panel:hover::before {
+    top: 22%;
+    bottom: 22%;
+  }
+}
+
+/* --- パネル内テキスト ------------------------------------ */
+
+.panel-title {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 768px) {
+  .panel-title {
+    font-size: 1.25rem;
+  }
+}
+
+.panel-desc {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 500;
+  display: block;
+  letter-spacing: 0.02em;
+}
+
+/* --- パネル内アイコンチップ：機能ごとに淡い色で塗り分け ----- */
+
+.panel-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  border-radius: 0.9rem;
+  border: 1px solid transparent;
+  transition: transform 0.16s ease;
+  flex-shrink: 0;
+  margin-left: 1rem;
+}
+
+@media (min-width: 768px) {
+  .panel-icon-wrapper {
+    padding: 0.875rem;
+  }
+}
+
+.menu-panel:hover .panel-icon-wrapper {
+  transform: scale(1.07) rotate(-3deg);
+}
+
+/* 物件管理：ブランドグリーン */
+.panel-bukken {
+  --panel-accent: var(--brand-600);
+}
+.panel-bukken .panel-icon-wrapper {
+  background: var(--brand-100);
+  border-color: var(--brand-200);
+  color: var(--brand-700);
+}
+
+/* 空き物件管理：ティール（緑系で揃えつつ区別） */
+.panel-akiya {
+  --panel-accent: #0d9488;
+}
+.panel-akiya .panel-icon-wrapper {
+  background: #ccfbf1;
+  border-color: #99f6e4;
+  color: #0f766e;
+}
+
+/* 対応履歴：アンバー（"要対応"の気配） */
+.panel-taiou {
+  --panel-accent: #d97706;
+}
+.panel-taiou .panel-icon-wrapper {
+  background: #fef3c7;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+/* ⚠ 未対応が溜まっているときの警告状態（page.tsx側で付与） */
+.panel-urgent {
+  --panel-accent: var(--danger-500);
+  border-color: #fecdd3;
+}
+.panel-urgent .panel-icon-wrapper {
+  background: #ffe4e6;
+  border-color: #fecdd3;
+  color: var(--danger-600);
+  animation: softPulse 2.4s ease-out infinite;
+}
+.panel-urgent:hover {
+  border-color: #fda4af;
+  box-shadow: 0 2px 4px rgb(15 42 30 / 0.05), 0 18px 36px -10px rgb(244 63 94 / 0.25);
+}
+
+/* 各種設定：グレー（準備中） */
+.panel-setting {
+  --panel-accent: #94a3b8;
+  cursor: default;
+}
+.panel-setting .panel-icon-wrapper {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #64748b;
+}
+.panel-setting:hover {
+  transform: none;
+  border-color: #e2e8f0;
+  box-shadow: var(--shadow-card);
+}
+.panel-setting:hover::before {
+  top: 22%;
+  bottom: 22%;
+}
+
+/* 旧クラス互換（入退去・契約管理を追加する時用） */
+.panel-keiyaku {
+  --panel-accent: #0e7490;
+}
+.panel-keiyaku .panel-icon-wrapper {
+  background: #cffafe;
+  border-color: #a5f3fc;
+  color: #0e7490;
+}
+
+/* --- クイック操作（メニュー下部のショートカット） ----------- */
+
+.quick-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  animation: fadeUp 0.35s 0.22s cubic-bezier(0.2, 0.8, 0.4, 1) both;
+}
+
+.quick-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease, color 0.14s ease;
+  white-space: nowrap;
+}
+
+.quick-action:hover {
+  border-color: var(--brand-300);
+  background: #ecfdf5;
+  color: var(--brand-800);
+  transform: translateY(-1px);
+}
+
+.quick-action:active {
+  transform: scale(0.97);
+}
+
+/* 最重要ショートカットは塗りで目立たせる（1つだけ） */
+.quick-action-primary {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  color: #ffffff;
+}
+.quick-action-primary:hover {
+  background: var(--brand-700);
+  border-color: var(--brand-700);
+  color: #ffffff;
+}
+
+/* =========================================================
+   共通コンポーネント
+   ========================================================= */
+
+@layer components {
+  /* 戻るボタンなど（グレー系） */
+  .btn-back {
+    @apply transition inline-flex items-center space-x-1 font-bold text-xs rounded-lg border shrink-0 cursor-pointer shadow-sm;
+    @apply text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 px-3 py-2 border-slate-300 active:scale-95;
+  }
+
+  /* 新規登録・保存など（グリーン系＝データを増やす操作で統一） */
+  .btn-success {
+    @apply transition inline-flex items-center space-x-1 font-bold text-xs rounded-lg border shrink-0 cursor-pointer shadow-sm;
+    @apply bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 border-transparent active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* テーブル内のリンク・ボタン風UI */
+  .btn-table-link {
+    @apply block w-full h-full px-4 py-3 hover:bg-emerald-50/70 transition underline decoration-2 underline-offset-2;
+  }
+
+  /* 明細の修正ボタン（一覧の行内に置く小さな編集ボタン） */
+  .btn-row-edit {
+    @apply inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-lg transition cursor-pointer shrink-0 active:scale-95;
+  }
+
+  /* 白カードの共通スタイル（各ページの bg-white ボックスに追加可能） */
+  .app-card {
+    @apply bg-white rounded-xl border border-slate-200/80;
+    box-shadow: var(--shadow-card);
+  }
+}
+
+@layer utilities {
+  /* 横スクロールするタブ列などでスクロールバーを隠す（スマホのタブUI用） */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
