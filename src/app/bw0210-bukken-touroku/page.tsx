@@ -4,7 +4,7 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { ArrowLeft, Save, Loader2, AlertCircle, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ROUTES, PROPERTY_TYPES, PROPERTY_TYPE_LIST, MANAGEMENT_TYPES, MANAGEMENT_TYPE_LIST } from '../../constants/routes';
+import { ROUTES, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, MANAGEMENT_TYPES, MANAGEMENT_TYPE_LABELS } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 // useSearchParams を使うためフォーム本体を分離（Suspenseでラップする）
@@ -15,9 +15,9 @@ function BukkenTourokuForm() {
   const isEditMode = !!editId;
 
   const [name, setName] = useState('');
-  const [type, setType] = useState<string>(PROPERTY_TYPES.MANSION);
+  const [type, setType] = useState<string>(PROPERTY_TYPES.MANSION.toString());
   const [address, setAddress] = useState('');
-  const [managementType, setManagementType] = useState<string>(MANAGEMENT_TYPES.JISHA);
+  const [managementType, setManagementType] = useState<string>(MANAGEMENT_TYPES.JISHA.toString());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode); // 編集時のみ既存データ待ち
   const [errorMsg, setErrorMsg] = useState('');
@@ -29,18 +29,18 @@ function BukkenTourokuForm() {
     async function fetchBukken() {
       try {
         const { data, error } = await supabase
-          .from('M020_Bukken')
+          .from('m200_basebukken')
           .select('*')
-          .eq('id', Number(editId))
+          .eq('bukken_id', Number(editId))
           .single();
 
         if (error) throw error;
 
         if (data) {
-          setName(data.name || '');
-          setType(data.type || PROPERTY_TYPES.MANSION);
+          setName(data.bukken_name || '');
+          setType(data.bukken_type?.toString() || PROPERTY_TYPES.MANSION.toString());
           setAddress(data.address || '');
-          setManagementType(data.management_type || MANAGEMENT_TYPES.JISHA);
+          setManagementType(data.kanri_kbn?.toString() || MANAGEMENT_TYPES.JISHA.toString());
         }
       } catch (err) {
         console.error('物件データ取得エラー:', err);
@@ -67,22 +67,24 @@ function BukkenTourokuForm() {
     setErrorMsg('');
 
     const payload = {
-      name: trimmedName,
-      type: type,
+      soshiki_id: 1,           // 適切な組織IDを設定してください
+      bukken_id: Number(Date.now().toString().slice(-6)), // 適切なID
+      bukken_name: name.trim(),
+      bukken_type: Number(type),      // ここを確実に数値に変換
+      kanri_kbn: Number(managementType), // ここを確実に数値に変換
       address: address.trim(),
-      management_type: managementType,
     };
 
     try {
       if (isEditMode) {
         const { error } = await supabase
-          .from('M020_Bukken')
+          .from('m200_basebukken')
           .update(payload)
-          .eq('id', Number(editId));
+          .eq('bukken_id', Number(editId));
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from('M020_Bukken')
+          .from('m200_basebukken')
           .insert([payload]);
         if (error) throw error;
       }
@@ -149,9 +151,9 @@ function BukkenTourokuForm() {
               value={type}
               onChange={(e) => setType(e.target.value)}
             >
-              {PROPERTY_TYPE_LIST.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {Object.entries(PROPERTY_TYPE_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
                 </option>
               ))}
             </select>
@@ -165,9 +167,9 @@ function BukkenTourokuForm() {
               value={managementType}
               onChange={(e) => setManagementType(e.target.value)}
             >
-              {MANAGEMENT_TYPE_LIST.map((m) => (
-                <option key={m} value={m}>
-                  {m}
+              {Object.entries(MANAGEMENT_TYPE_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
                 </option>
               ))}
             </select>
