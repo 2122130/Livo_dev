@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Building2, MapPin, SlidersHorizontal, Layers, X, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, RefreshCw, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../context/AuthContext';
 import { ROUTES, ROOM_STATUS, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, MANAGEMENT_TYPES, MANAGEMENT_TYPE_LABELS } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
@@ -35,24 +36,24 @@ export default function BukkenIchiran() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
-  // 仮のログイン組織ID
-  const currentSoshikiId = 1;
-
+  const { user } = useAuth();
+ 
   const fetchProperties = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     setLoadError(false);
     try {
-      // 自分の組織のデータのみを並列取得
+      // ログインユーザーの組織データのみを並列取得
       const [bukkenRes, heyaRes] = await Promise.all([
         supabase
           .from('m200_basebukken')
           .select('*')
-          .eq('soshiki_id', currentSoshikiId)
+          .eq('soshiki_id', user.soshiki_id)
           .order('bukken_id', { ascending: true }),
         supabase
           .from('m300_heya')
           .select('bukken_id, heya_status')
-          .eq('soshiki_id', currentSoshikiId),
+          .eq('soshiki_id', user.soshiki_id),
       ]);
 
       if (bukkenRes.error) throw bukkenRes.error;
@@ -80,11 +81,15 @@ export default function BukkenIchiran() {
     } finally {
       setLoading(false);
     }
-  }, []);
-
+  }, [user]);
+ 
   useEffect(() => {
-    fetchProperties();
-  }, [fetchProperties]);
+    if (!user) return;
+    const loadProperties = async () => {
+      await fetchProperties();
+    };
+    void loadProperties();
+  }, [fetchProperties, user]);
 
   // 検索・絞り込み・ソート
   const filteredProperties = useMemo(() => {

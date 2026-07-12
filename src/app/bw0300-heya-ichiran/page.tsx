@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
-import { ArrowLeft, Building2, Plus, DoorOpen, CheckCircle2, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Building2, Plus, DoorOpen, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ROUTES, ROOM_STATUS, ROOM_STATUS_LABELS } from '../../constants/index';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../../utils/supabase';
 
 interface Property {
@@ -31,17 +32,42 @@ interface Room {
   guarantee_company: string | null; // 保証会社
   m200_basebukken?: {
     bukken_name: string;
-  };
+  } | null;
 }
+
+type RawRoom = {
+  soshiki_id?: number;
+  bukken_id?: number;
+  heya_id?: number;
+  heya_name?: string | null;
+  room_number?: string | null;
+  heya_status?: number | null;
+  status?: number | null;
+  rent?: number | null;
+  other_fee?: number | null;
+  management_fee?: number | null;
+  layout?: string | null;
+  guarantee_company?: string | null;
+  guarantor_company?: string | null;
+  m200_basebukken?: { bukken_name: string } | null;
+};
 
 type SortKey = 'heya_name' | 'heya_status' | 'layout' | 'rent' | 'other_fee';
 type SortOrder = 'asc' | 'desc';
+
+const STATUS_TABS = ['すべて', '空室', '入居中', '準備中'] as const;
+const STATUS_TAB_MAP: Record<string, number | null> = {
+  空室: ROOM_STATUS.AKISHITSU,
+  入居中: ROOM_STATUS.NYUKYUCHU,
+  準備中: ROOM_STATUS.JUNBICHU,
+};
 
 function HeyaIchiranContent() {
   const searchParams = useSearchParams();
   const bukkenId = searchParams.get('id');
   const initialStatus = searchParams.get('status'); // 👈 メニューからの「?status=空室」を受け取る
 
+  const { user } = useAuth();
   const [property, setProperty] = useState<Property | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [activeTab, setActiveTab] = useState<string>(initialStatus || 'すべて');
@@ -50,17 +76,11 @@ function HeyaIchiranContent() {
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-  const STATUS_TABS = ['すべて', '空室', '入居中', '準備中'] as const;
-  const STATUS_TAB_MAP: Record<string, number | null> = {
-    空室: ROOM_STATUS.AKISHITSU,
-    入居中: ROOM_STATUS.NYUKYUCHU,
-    準備中: ROOM_STATUS.JUNBICHU,
-  };
 
-  const normalizeRoom = (room: any): Room => ({
-    soshiki_id: room.soshiki_id,
-    bukken_id: room.bukken_id,
-    heya_id: room.heya_id,
+  const normalizeRoom = (room: RawRoom): Room => ({
+    soshiki_id: room.soshiki_id ?? 0,
+    bukken_id: room.bukken_id ?? 0,
+    heya_id: room.heya_id ?? 0,
     heya_name: room.heya_name ?? room.room_number ?? '',
     heya_status: room.heya_status ?? room.status ?? ROOM_STATUS.AKISHITSU,
     rent: room.rent ?? 0,
@@ -75,6 +95,7 @@ function HeyaIchiranContent() {
   const backHref = bukkenId ? ROUTES.BUKKEN_ICHIRAN.path : ROUTES.MAIN_MENU.path;
 
   const fetchDetails = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     setLoadError(false);
     try {
@@ -83,8 +104,8 @@ function HeyaIchiranContent() {
       if (bukkenId) {
         // 【パターンA】特定の物件が指定されている場合（物件情報と部屋を並列取得）
         const [propRes, roomRes] = await Promise.all([
-          supabase.from('m200_basebukken').select('*').eq('bukken_id', Number(bukkenId)).single(),
-          supabase.from('m300_heya').select('*').eq('bukken_id', Number(bukkenId)).order('heya_name', { ascending: true }),
+          supabase.from('m200_basebukken').select('*').eq('soshiki_id', user.soshiki_id).eq('bukken_id', Number(bukkenId)).single(),
+          supabase.from('m300_heya').select('*').eq('soshiki_id', user.soshiki_id).eq('bukken_id', Number(bukkenId)).order('heya_name', { ascending: true }),
         ]);
         if (propRes.error) throw propRes.error;
         if (roomRes.error) throw roomRes.error;
@@ -103,7 +124,7 @@ function HeyaIchiranContent() {
         });
 
         // 物件名も一緒に表示できるようにリレーション付きで部屋を取得
-        const { data: roomData, error } = await supabase.from('m300_heya').select('*, m200_basebukken(bukken_name)').order('heya_name', { ascending: true });
+        const { data: roomData, error } = await supabase.from('m300_heya').select('*, m200_basebukken(bukken_name)').eq('soshiki_id', user.soshiki_id).order('heya_name', { ascending: true });
         if (error) throw error;
         setRooms((roomData || []).map(normalizeRoom));
       }
@@ -115,17 +136,20 @@ function HeyaIchiranContent() {
     } finally {
       setLoading(false);
     }
-  }, [bukkenId, initialStatus]);
-
-  const [user, setUser] = useState<any>(null);
+  }, [bukkenId, initialStatus, user]);
+ 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-  }, []);
-
+    if (!user) return;
+    const loadDetails = async () => {
+      await fetchDetails();
+    };
+    void loadDetails();
+  }, [fetchDetails, user]);
+ 
   // タブ絞り込み＋ソート（派生値として計算し、再レンダーとカクつきを減らす）
   const filteredRooms = useMemo(() => {
     const statusFilter = activeTab === 'すべて' ? null : STATUS_TAB_MAP[activeTab];
-    let result = statusFilter === null ? [...rooms] : rooms.filter(room => room.heya_status === statusFilter);
+    const result = statusFilter === null ? [...rooms] : rooms.filter(room => room.heya_status === statusFilter);
 
     if (sortKey) {
       result.sort((a, b) => {
@@ -183,22 +207,6 @@ function HeyaIchiranContent() {
     status === ROOM_STATUS.JUNBICHU ? 'bg-amber-100 text-amber-950 border border-amber-400' :
     status === ROOM_STATUS.NYUKYUCHU ? 'bg-sky-100 text-sky-950 border border-sky-400' :
     'bg-amber-100 text-amber-950 border border-amber-400';
-
-  const renderCheckBadge = (label: string, isDone: boolean | undefined) => {
-    if (isDone) {
-      return (
-        <span className="inline-flex items-center space-x-0.5 bg-emerald-50 text-emerald-900 border border-emerald-300 px-1.5 py-0.5 rounded text-[11px] font-extrabold shrink-0">
-          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-          <span>{label}</span>
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center space-x-0.5 bg-slate-100 text-slate-500 border border-slate-300 px-1.5 py-0.5 rounded text-[11px] font-bold shrink-0 opacity-60">
-        <span>未{label}</span>
-      </span>
-    );
-  };
 
   const roomEditPath = (room: Room) =>
     `${ROUTES.HEYA_TOUROKU.path}?property_id=${room.bukken_id}&property_name=${encodeURIComponent(room.m200_basebukken?.bukken_name || property?.bukken_name || '')}&room_id=${room.heya_id}`;

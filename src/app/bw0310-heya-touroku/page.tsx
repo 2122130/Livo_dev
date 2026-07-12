@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useEffect, useState, Suspense } from 'react';
-import { ArrowLeft, Save, Loader2, Info, Trash2, FileText, Image as ImageIcon, AlertCircle, DoorOpen } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Trash2, FileText, Image as ImageIcon, AlertCircle, DoorOpen } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ROUTES, ROOM_STATUS, ROOM_STATUS_LIST } from '../../constants/routes';
+import { ROUTES, ROOM_STATUS, ROOM_STATUS_LIST } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 // ステータスの型定義を厳密に指定
@@ -57,13 +57,13 @@ function HeyaTourokuForm() {
         if (error) throw error;
 
         if (data) {
-          const roomRow = data as any;
-          setRoomNumber(roomRow.heya_name || '');
-          setStatus((roomRow.heya_status as RoomStatus) || ROOM_STATUS.VACANT);
-          setLayout(roomRow.layout || '');
-          setRent(roomRow.rent ?? '');
-          setOtherFee(roomRow.other_fee ?? '');
-          setGuarantorCompany(roomRow.guarantee_company || '');
+          const roomRow = data as Record<string, unknown>;
+          setRoomNumber((roomRow.heya_name as string) || '');
+          setStatus((roomRow.heya_status as RoomStatus) || ROOM_STATUS.AKISHITSU);
+          setLayout((roomRow.layout as string) || '');
+          setRent((roomRow.rent as number) ?? '');
+          setOtherFee((roomRow.other_fee as number) ?? '');
+          setGuarantorCompany((roomRow.guarantee_company as string) || '');
         }
       } catch (err) {
         console.error('部屋データ取得エラー:', err);
@@ -90,7 +90,7 @@ function HeyaTourokuForm() {
     setIsSubmitting(true);
     setErrorMsg('');
 
-    let roomPayload: any = {
+    const basePayload = {
       bukken_id: Number(propertyId),
       heya_name: trimmedRoomNumber,
       heya_status: status,
@@ -104,9 +104,8 @@ function HeyaTourokuForm() {
       if (isEditMode) {
         const { error } = await supabase
           .from('m300_heya')
-          .update(roomPayload)
+          .update(basePayload)
           .eq('heya_id', Number(roomId));
-
         if (error) throw error;
       } else {
         const { data: bukkenData, error: bukkenError } = await supabase
@@ -129,19 +128,18 @@ function HeyaTourokuForm() {
         if (heyaError) throw heyaError;
 
         const nextHeyaId = (lastHeya?.[0]?.heya_id ?? 0) + 1;
-        roomPayload = {
-          ...roomPayload,
+        const insertPayload = {
+          ...basePayload,
           heya_id: nextHeyaId,
           soshiki_id: bukkenData.soshiki_id,
         };
 
         const { error } = await supabase
           .from('m300_heya')
-          .insert([roomPayload]);
+          .insert([insertPayload]);
 
         if (error) throw error;
       }
-
       // 成功時はダイアログを挟まず即一覧へ（結果は一覧で確認できる）
       router.push(heyaIchiranPath);
     } catch (err) {

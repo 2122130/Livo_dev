@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Plus, ClipboardList, ArrowUpDown, ArrowUp, ArrowDown, Search, Building2, User, SlidersHorizontal, X, RefreshCw, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ROUTES, TAIOU_STATUS, TAIOU_CATEGORY } from '../../constants/routes';
+import { ROUTES, TAIOU_STATUS, TAIOU_CATEGORY } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 interface TaiouHistoryItem {
@@ -54,7 +54,7 @@ export default function TaiouIchiran() {
     setLoadError(false);
     try {
       const [histRes, bukkenRes, roomRes] = await Promise.all([
-        supabase.from('T010_TaiouHist').select('*'),
+        supabase.from('t300_taioulog').select('*'),
         supabase.from('M020_Bukken').select('id, name'),
         supabase.from('M030_Room').select('id, bukken_id, room_number')
       ]);

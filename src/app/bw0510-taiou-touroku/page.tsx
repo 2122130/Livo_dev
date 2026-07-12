@@ -1,11 +1,15 @@
 'use client';
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useMemo, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Save, ClipboardList, Calendar, User, Building2, HelpCircle, Tag, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { ROUTES, TAIOU_STATUS, TAIOU_CATEGORY } from '../../constants/routes';
+import { ROUTES, TAIOU_STATUS, TAIOU_CATEGORY } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
+
+// Supabase helper for legacy table names that are not present in the generated Database schema types.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const supabaseAny = supabase as unknown as { from: (relation: string) => any };
 
 function TaiouTourokuForm() {
   const router = useRouter();
@@ -19,15 +23,14 @@ function TaiouTourokuForm() {
   // マスター選択肢用
   const [bukkenOptions, setBukkenOptions] = useState<{ id: number; name: string }[]>([]);
   const [roomOptions, setRoomOptions] = useState<{ id: number; bukken_id: number; room_number: string }[]>([]);
-  const [filteredRoomOptions, setFilteredRoomOptions] = useState<{ id: number; room_number: string }[]>([]);
 
   // フォームの状態（リテラル型エラー対策として `as string` で汎用的な string 型へと拡張）
   const [formData, setFormData] = useState({
     bukken_id: '',
     room_id: '',
     uketsuke_date: new Date().toISOString().split('T')[0], // 初期値は今日の日付
-    category: TAIOU_CATEGORY.SHUZEN as string,
-    status: TAIOU_STATUS.MITAIOU as string,
+    category: 0,
+    status: 0,
     title: '',
     detail: '',
     completion_date: '',
@@ -37,6 +40,15 @@ function TaiouTourokuForm() {
     bokou: ''
   });
 
+  const filteredRoomOptions = useMemo(() => {
+    if (!formData.bukken_id) {
+      return [];
+    }
+    return roomOptions
+      .filter((room) => room.bukken_id === Number(formData.bukken_id))
+      .map(({ id, room_number }) => ({ id, room_number }));
+  }, [formData.bukken_id, roomOptions]);
+
   // 1. 物件・部屋マスターの読み込み ＆ 編集時の初期データ取得
   useEffect(() => {
     async function initForm() {
@@ -44,8 +56,8 @@ function TaiouTourokuForm() {
       try {
         // マスターデータ取得
         const [bukkenRes, roomRes] = await Promise.all([
-          supabase.from('M020_Bukken').select('id, name').order('id'),
-          supabase.from('M030_Room').select('id, bukken_id, room_number').order('room_number')
+          supabaseAny.from('M020_Bukken').select('id, name').order('id'),
+          supabaseAny.from('M030_Room').select('id, bukken_id, room_number').order('room_number')
         ]);
 
         if (bukkenRes.data) setBukkenOptions(bukkenRes.data);
@@ -53,7 +65,7 @@ function TaiouTourokuForm() {
 
         // 編集モードの場合は既存データをロード
         if (editId) {
-          const { data: histData, error } = await supabase
+          const { data: histData, error } = await supabaseAny
             .from('T010_TaiouHist')
             .select('*')
             .eq('id', editId)
@@ -89,20 +101,14 @@ function TaiouTourokuForm() {
   }, [editId]);
 
   // 2. 物件が選択されたら、紐づく部屋の選択肢を自動フィルター
-  useEffect(() => {
-    if (!formData.bukken_id) {
-      setFilteredRoomOptions([]);
-      return;
-    }
-    const filtered = roomOptions.filter(r => r.bukken_id === Number(formData.bukken_id));
-    setFilteredRoomOptions(filtered);
-
-    // 物件が変わった時、もし現在の部屋が新しい物件に属していなければクリア
-    const isCurrentRoomValid = filtered.some(r => r.id === Number(formData.room_id));
-    if (!isCurrentRoomValid) {
-      setFormData(prev => ({ ...prev, room_id: '' }));
-    }
-  }, [formData.bukken_id, roomOptions]);
+  const handleBukkenChange = (bukkenId: string) => {
+    const filtered = roomOptions.filter((room) => room.bukken_id === Number(bukkenId));
+    setFormData((prev) => ({
+      ...prev,
+      bukken_id: bukkenId,
+      room_id: filtered.some((room) => room.id === Number(prev.room_id)) ? prev.room_id : ''
+    }));
+  };
 
   // 状況が「完了」になったら完了日を今日にする、それ以外ならクリアする補助
   const handleStatusChange = (statusValue: string) => {
@@ -145,14 +151,14 @@ function TaiouTourokuForm() {
 
       if (editId) {
         // 編集更新
-        const { error } = await supabase
+        const { error } = await supabaseAny
           .from('T010_TaiouHist')
           .update(payload)
           .eq('id', editId);
         if (error) throw error;
       } else {
         // 新規登録
-        const { error } = await supabase
+        const { error } = await supabaseAny
           .from('T010_TaiouHist')
           .insert([payload]);
         if (error) throw error;
@@ -224,7 +230,7 @@ function TaiouTourokuForm() {
               <select
                 required
                 value={formData.bukken_id}
-                onChange={(e) => setFormData(prev => ({ ...prev, bukken_id: e.target.value }))}
+                onChange={(e) => handleBukkenChange(e.target.value)}
                 className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-950 font-bold focus:outline-none focus:border-emerald-500 transition"
               >
                 <option value="">-- 物件を選択してください --</option>

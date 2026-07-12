@@ -34,6 +34,12 @@ export const ROOM_STATUS = {
   NYUKYUCHU: 3, // '入居中'
 } as const;
 
+export const ROOM_STATUS_LIST = [
+  ROOM_STATUS.AKISHITSU,
+  ROOM_STATUS.JUNBICHU,
+  ROOM_STATUS.NYUKYUCHU,
+] as const;
+
 // 対応状況区分 (kubun_type: '060')
 export const TAIOU_STATUS = {
   MITAIOU: 1,   // '未処理'
