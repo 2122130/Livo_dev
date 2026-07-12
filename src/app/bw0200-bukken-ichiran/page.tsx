@@ -4,20 +4,20 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Building2, MapPin, SlidersHorizontal, Layers, X, ArrowUpDown, ArrowUp, ArrowDown, ArrowLeft, RefreshCw, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ROUTES } from '../../constants/routes';
+import { ROUTES, ROOM_STATUS, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, MANAGEMENT_TYPES, MANAGEMENT_TYPE_LABELS } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 interface Property {
-  id: number;
-  name: string;
-  type: string;
-  address: string;
-  management_type: string;
+  bukken_id: number;
+  bukken_name: string;
+  bukken_type: number | null;
+  address: string | null;
+  kanri_kbn: number | null;
   total_rooms?: number;
   vacant_rooms?: number;
 }
 
-type SortKey = 'name' | 'type' | 'management_type' | 'vacant_rooms' | 'address';
+type SortKey = 'bukken_name' | 'bukken_type' | 'kanri_kbn' | 'vacant_rooms' | 'address';
 type SortOrder = 'asc' | 'desc';
 
 export default function BukkenIchiran() {
@@ -26,41 +26,51 @@ export default function BukkenIchiran() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
-  // 検索・絞り込み用状態
+  // 検索・絞り込み用状態（定数の数値に合わせるため初期値は文字列 'all'）
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [selectedType, setSelectedType] = useState('すべて');
-  const [selectedManagement, setSelectedManagement] = useState('すべて');
+  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedManagement, setSelectedManagement] = useState<string>('all');
 
   // ソート用状態
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
+  // 仮のログイン組織ID
+  const currentSoshikiId = 1;
+
   const fetchProperties = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
     try {
-      // 物件と部屋を並列取得（直列2回 → 並列1往復分に短縮）
-      const [bukkenRes, roomRes] = await Promise.all([
-        supabase.from('M020_Bukken').select('*').order('id', { ascending: true }),
-        supabase.from('M030_Room').select('bukken_id, status'),
+      // 自分の組織のデータのみを並列取得
+      const [bukkenRes, heyaRes] = await Promise.all([
+        supabase
+          .from('m200_basebukken')
+          .select('*')
+          .eq('soshiki_id', currentSoshikiId)
+          .order('bukken_id', { ascending: true }),
+        supabase
+          .from('m300_heya')
+          .select('bukken_id, heya_status')
+          .eq('soshiki_id', currentSoshikiId),
       ]);
 
       if (bukkenRes.error) throw bukkenRes.error;
-      if (roomRes.error) throw roomRes.error;
+      if (heyaRes.error) throw heyaRes.error;
 
       // 物件ごとの戸数・空室数を1パスで集計
       const countMap = new Map<number, { total: number; vacant: number }>();
-      (roomRes.data || []).forEach(r => {
+      (heyaRes.data || []).forEach(r => {
         const entry = countMap.get(r.bukken_id) || { total: 0, vacant: 0 };
         entry.total += 1;
-        if (r.status === '空室') entry.vacant += 1;
+        if (r.heya_status === ROOM_STATUS.AKISHITSU) entry.vacant += 1;
         countMap.set(r.bukken_id, entry);
       });
 
       const updatedProperties: Property[] = (bukkenRes.data || []).map(prop => ({
         ...prop,
-        total_rooms: countMap.get(prop.id)?.total ?? 0,
-        vacant_rooms: countMap.get(prop.id)?.vacant ?? 0,
+        total_rooms: countMap.get(prop.bukken_id)?.total ?? 0,
+        vacant_rooms: countMap.get(prop.bukken_id)?.vacant ?? 0,
       }));
 
       setProperties(updatedProperties);
@@ -76,24 +86,26 @@ export default function BukkenIchiran() {
     fetchProperties();
   }, [fetchProperties]);
 
-  // 検索・絞り込み・ソート（派生値として計算し再レンダーを削減）
+  // 検索・絞り込み・ソート
   const filteredProperties = useMemo(() => {
     let result = [...properties];
 
     if (searchKeyword.trim() !== '') {
       const kw = searchKeyword.toLowerCase();
       result = result.filter(p =>
-        p.name.toLowerCase().includes(kw) ||
+        p.bukken_name.toLowerCase().includes(kw) ||
         (p.address && p.address.toLowerCase().includes(kw))
       );
     }
 
-    if (selectedType !== 'すべて') {
-      result = result.filter(p => p.type === selectedType);
+    if (selectedType !== 'all') {
+      const typeNum = Number(selectedType);
+      result = result.filter(p => p.bukken_type === typeNum);
     }
 
-    if (selectedManagement !== 'すべて') {
-      result = result.filter(p => (p.management_type || '自社') === selectedManagement);
+    if (selectedManagement !== 'all') {
+      const mgmtNum = Number(selectedManagement);
+      result = result.filter(p => p.kanri_kbn === mgmtNum);
     }
 
     if (sortKey) {
@@ -101,12 +113,13 @@ export default function BukkenIchiran() {
         let valA = a[sortKey];
         let valB = b[sortKey];
 
-        if (sortKey === 'management_type') {
-          valA = valA || '自社';
-          valB = valB || '自社';
-        } else {
+        // 各カラムのフォールバック値の調整
+        if (sortKey === 'bukken_name' || sortKey === 'address') {
           valA = valA ?? '';
           valB = valB ?? '';
+        } else {
+          valA = valA ?? 0;
+          valB = valB ?? 0;
         }
 
         if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
@@ -120,8 +133,8 @@ export default function BukkenIchiran() {
 
   const handleClearFilters = () => {
     setSearchKeyword('');
-    setSelectedType('すべて');
-    setSelectedManagement('すべて');
+    setSelectedType('all');
+    setSelectedManagement('all');
     setSortKey(null);
     setSortOrder('asc');
   };
@@ -142,17 +155,13 @@ export default function BukkenIchiran() {
       : <ArrowDown className="h-3.5 w-3.5 text-emerald-600 ml-1 shrink-0" />;
   };
 
-  const isFiltered = searchKeyword !== '' || selectedType !== 'すべて' || selectedManagement !== 'すべて' || sortKey !== null;
+  const isFiltered = searchKeyword !== '' || selectedType !== 'all' || selectedManagement !== 'all' || sortKey !== null;
 
-  // 明細修正ボタンの遷移先（物件登録画面の編集モード）
   const editPath = (id: number) => `${ROUTES.BUKKEN_TOUROKU.path}?id=${id}`;
 
   return (
-    /* 📱 スマホ: 通常スクロール ／ 💻 PC: 画面内固定＋明細のみスクロール
-       ※ スマホで 100vh を使うとアドレスバーの伸縮で画面がガタつくため md 以上のみ適用 */
     <main className="p-3 sm:p-6 max-w-7xl mx-auto flex flex-col space-y-3 sm:space-y-4 md:h-[calc(100dvh-3.5rem)] md:overflow-hidden">
-
-      {/* 🏷️ ページタイトル ＆ 新規登録ボタン（配置は全画面共通：左=戻る+タイトル / 右=新規登録） */}
+      {/* 🏷️ ページタイトル ＆ 新規登録ボタン */}
       <div className="flex flex-wrap justify-between items-center gap-2 bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200 shrink-0">
         <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
           <Link href={ROUTES.MAIN_MENU.path} className="btn-back">
@@ -191,7 +200,6 @@ export default function BukkenIchiran() {
           )}
         </div>
 
-        {/* スマホ: キーワード全幅＋セレクト2列 ／ PC: 3列 */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4">
           <div className="col-span-2 md:col-span-1">
             <label className="block text-xs font-bold text-slate-900 mb-1">物件名・所在地</label>
@@ -214,12 +222,12 @@ export default function BukkenIchiran() {
               onChange={(e) => setSelectedType(e.target.value)}
               className="w-full px-3 py-2 md:py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-950 font-bold focus:outline-none focus:border-emerald-500 transition"
             >
-              <option value="すべて">すべて</option>
-              <option value="マンション">マンション</option>
-              <option value="アパート">アパート</option>
-              <option value="戸建て">戸建て</option>
-              <option value="店舗・オフィス">店舗・オフィス</option>
-              <option value="駐車場">駐車場</option>
+              <option value="all">すべて</option>
+              <option value={PROPERTY_TYPES.MANSION}>マンション</option>
+              <option value={PROPERTY_TYPES.APARTMENT}>アパート</option>
+              <option value={PROPERTY_TYPES.HOUSE}>戸建て</option>
+              <option value={PROPERTY_TYPES.TENPO}>店舗</option>
+              <option value={PROPERTY_TYPES.LAND}>土地</option>
             </select>
           </div>
 
@@ -230,17 +238,16 @@ export default function BukkenIchiran() {
               onChange={(e) => setSelectedManagement(e.target.value)}
               className="w-full px-3 py-2 md:py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-950 font-bold focus:outline-none focus:border-emerald-500 transition"
             >
-              <option value="すべて">すべて</option>
-              <option value="自社">自社管理</option>
-              <option value="他社">他社管理</option>
-              <option value="部分委託">部分委託</option>
+              <option value="all">すべて</option>
+              <option value={MANAGEMENT_TYPES.JISHA}>自社</option>
+              <option value={MANAGEMENT_TYPES.KANRI}>管理</option>
             </select>
           </div>
         </div>
       </div>
 
-      {/* 📱 スマホ用: カード型リスト（テーブルの横スクロールを廃止） */}
-      <div className="md:hidden space-y-2">
+      {/* 📱 スマホ用: カード型リスト */}
+      <div className="md:hidden space-y-2 overflow-y-auto flex-1 min-h-0">
         <p className="text-xs font-bold text-slate-500 px-1">
           {loading ? '読み込み中...' : `該当: ${filteredProperties.length}件 / 総数: ${properties.length}件`}
         </p>
@@ -267,18 +274,21 @@ export default function BukkenIchiran() {
           </div>
         ) : (
           filteredProperties.map((prop) => (
-            /* カード全体タップ=部屋一覧へ。右下の修正ボタンだけ物件編集へ */
             <div
-              key={prop.id}
-              onClick={() => router.push(`${ROUTES.HEYA_ICHIRAN.path}?id=${prop.id}`)}
+              key={prop.bukken_id}
+              onClick={() => router.push(`${ROUTES.HEYA_ICHIRAN.path}?id=${prop.bukken_id}`)}
               className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 active:bg-emerald-50 transition cursor-pointer"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="font-extrabold text-emerald-700 text-base leading-snug">{prop.name}</div>
+                  <div className="font-extrabold text-emerald-700 text-base leading-snug">{prop.bukken_name}</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    <span className="text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">{prop.type || '未設定'}</span>
-                    <span className="text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">{prop.management_type || '自社'}</span>
+                    <span className="text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">
+                      {prop.bukken_type !== null ? PROPERTY_TYPE_LABELS[prop.bukken_type] : '未設定'}
+                    </span>
+                    <span className="text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">
+                      {prop.kanri_kbn !== null ? MANAGEMENT_TYPE_LABELS[prop.kanri_kbn] : '未設定'}
+                    </span>
                   </div>
                   {prop.address && (
                     <div className="mt-1.5 text-xs text-slate-500 font-medium flex items-center space-x-1 min-w-0">
@@ -294,7 +304,7 @@ export default function BukkenIchiran() {
                     <span className="text-slate-400 text-sm font-bold"> / {prop.total_rooms ?? 0}</span>
                   </span>
                   <Link
-                    href={editPath(prop.id)}
+                    href={editPath(prop.bukken_id)}
                     onClick={(e) => e.stopPropagation()}
                     className="btn-row-edit mt-2"
                   >
@@ -324,46 +334,31 @@ export default function BukkenIchiran() {
           <table className="w-full text-left border-collapse text-sm min-w-[980px]">
             <thead className="sticky top-0 z-20 shadow-[0_2px_2px_-1px_rgba(0,0,0,0.05)]">
               <tr className="bg-slate-100 border-b border-slate-200 text-slate-950 font-bold select-none">
-                <th
-                  onClick={() => handleSort('name')}
-                  className="px-4 py-3 w-72 cursor-pointer hover:bg-slate-200 transition group/th"
-                >
+                <th onClick={() => handleSort('bukken_name')} className="px-4 py-3 w-72 cursor-pointer hover:bg-slate-200 transition group/th">
                   <div className="flex items-center justify-between">
                     <span>物件名 (クリックで部屋一覧へ)</span>
-                    {renderSortIcon('name')}
+                    {renderSortIcon('bukken_name')}
                   </div>
                 </th>
-                <th
-                  onClick={() => handleSort('type')}
-                  className="px-4 py-3 w-32 cursor-pointer hover:bg-slate-200 transition group/th"
-                >
+                <th onClick={() => handleSort('bukken_type')} className="px-4 py-3 w-32 cursor-pointer hover:bg-slate-200 transition group/th">
                   <div className="flex items-center justify-between">
                     <span>物件種別</span>
-                    {renderSortIcon('type')}
+                    {renderSortIcon('bukken_type')}
                   </div>
                 </th>
-                <th
-                  onClick={() => handleSort('management_type')}
-                  className="px-4 py-3 w-32 cursor-pointer hover:bg-slate-200 transition group/th"
-                >
+                <th onClick={() => handleSort('kanri_kbn')} className="px-4 py-3 w-32 cursor-pointer hover:bg-slate-200 transition group/th">
                   <div className="flex items-center justify-between">
                     <span>管理区分</span>
-                    {renderSortIcon('management_type')}
+                    {renderSortIcon('kanri_kbn')}
                   </div>
                 </th>
-                <th
-                  onClick={() => handleSort('vacant_rooms')}
-                  className="px-4 py-3 w-36 cursor-pointer hover:bg-slate-200 transition group/th"
-                >
+                <th onClick={() => handleSort('vacant_rooms')} className="px-4 py-3 w-36 cursor-pointer hover:bg-slate-200 transition group/th">
                   <div className="flex items-center justify-center">
                     <span>空室 / 総戸数</span>
                     {renderSortIcon('vacant_rooms')}
                   </div>
                 </th>
-                <th
-                  onClick={() => handleSort('address')}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-200 transition group/th"
-                >
+                <th onClick={() => handleSort('address')} className="px-4 py-3 cursor-pointer hover:bg-slate-200 transition group/th">
                   <div className="flex items-center justify-between">
                     <span>所在地</span>
                     {renderSortIcon('address')}
@@ -374,7 +369,6 @@ export default function BukkenIchiran() {
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
               {loading ? (
-                // スケルトン行：レイアウトを確定させたまま読み込みを見せる
                 Array.from({ length: 8 }).map((_, i) => (
                   <tr key={`skeleton-${i}`} className="animate-pulse">
                     <td className="px-4 py-3"><div className="h-4 bg-slate-200 rounded w-3/4" /></td>
@@ -389,10 +383,7 @@ export default function BukkenIchiran() {
                 <tr>
                   <td colSpan={6} className="p-8 text-center bg-slate-50/50">
                     <p className="text-red-600 font-bold mb-3">データの取得に失敗しました。</p>
-                    <button
-                      onClick={fetchProperties}
-                      className="inline-flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold transition cursor-pointer"
-                    >
+                    <button onClick={fetchProperties} className="inline-flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-xs font-bold transition cursor-pointer">
                       <RefreshCw className="h-3.5 w-3.5" />
                       <span>再読み込み</span>
                     </button>
@@ -406,17 +397,21 @@ export default function BukkenIchiran() {
                 </tr>
               ) : (
                 filteredProperties.map((prop) => (
-                  <tr key={prop.id} className="hover:bg-slate-50/60 transition group">
+                  <tr key={prop.bukken_id} className="hover:bg-slate-50/60 transition group">
                     <td className="p-0 font-extrabold text-emerald-700">
                       <Link
-                        href={`${ROUTES.HEYA_ICHIRAN.path}?id=${prop.id}`}
+                        href={`${ROUTES.HEYA_ICHIRAN.path}?id=${prop.bukken_id}`}
                         className="block w-full h-full px-4 py-3 hover:bg-emerald-50/70 transition underline decoration-2 underline-offset-2"
                       >
-                        {prop.name}
+                        {prop.bukken_name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3 font-bold text-slate-800">{prop.type || '未設定'}</td>
-                    <td className="px-4 py-3 font-bold text-slate-700">{prop.management_type || '自社'}</td>
+                    <td className="px-4 py-3 font-bold text-slate-800">
+                      {prop.bukken_type !== null ? PROPERTY_TYPE_LABELS[prop.bukken_type] : '未設定'}
+                    </td>
+                    <td className="px-4 py-3 font-bold text-slate-700">
+                      {prop.kanri_kbn !== null ? MANAGEMENT_TYPE_LABELS[prop.kanri_kbn] : '未設定'}
+                    </td>
                     <td className="px-4 py-3 text-center font-bold text-slate-700">
                       <span className="text-emerald-600 font-extrabold text-base">
                         {prop.vacant_rooms ?? 0}
@@ -435,7 +430,7 @@ export default function BukkenIchiran() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <Link href={editPath(prop.id)} className="btn-row-edit">
+                      <Link href={editPath(prop.bukken_id)} className="btn-row-edit">
                         <Pencil className="h-3.5 w-3.5" />
                         <span>修正</span>
                       </Link>
