@@ -4,11 +4,16 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { ArrowLeft, Save, Loader2, Info, Trash2, FileText, Image as ImageIcon, AlertCircle, DoorOpen } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ROUTES, ROOM_STATUS_LIST } from '../../constants/routes';
+import { ROUTES, ROOM_STATUS, ROOM_STATUS_LIST } from '../../constants/routes';
 import { supabase } from '../../utils/supabase';
 
 // ステータスの型定義を厳密に指定
-type RoomStatus = "空室" | "入居中" | "準備中";
+type RoomStatus = typeof ROOM_STATUS_LIST[number];
+const ROOM_STATUS_LABELS = {
+  1: '空室',
+  2: '入居中',
+  3: '準備中',
+} as const;
 
 // 1. useSearchParams を使用するフォームの本体コンポーネント
 function HeyaTourokuForm() {
@@ -25,15 +30,8 @@ function HeyaTourokuForm() {
   const [status, setStatus] = useState<RoomStatus>(ROOM_STATUS_LIST[0] as RoomStatus);
   const [layout, setLayout] = useState('');
   const [rent, setRent] = useState<number | ''>('');
-  const [parkingNumber, setParkingNumber] = useState('');
-  const [managementFee, setManagementFee] = useState<number | ''>('');
-
-  const [isEvacuated, setIsEvacuated] = useState(false);
-  const [isRepaired, setIsRepaired] = useState(false);
-  const [isCleaned, setIsCleaned] = useState(false);
-
+  const [otherFee, setOtherFee] = useState<number | ''>('');
   const [guarantorCompany, setGuarantorCompany] = useState('');
-  const [remarks, setRemarks] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -51,25 +49,21 @@ function HeyaTourokuForm() {
     async function fetchRoomData() {
       try {
         const { data, error } = await supabase
-          .from('M030_Room')
+          .from('m300_heya')
           .select('*')
-          .eq('id', roomId)
+          .eq('heya_id', Number(roomId))
           .single();
 
         if (error) throw error;
 
         if (data) {
-          setRoomNumber(data.room_number || '');
-          setStatus((data.status as RoomStatus) || '空室');
-          setLayout(data.layout || '');
-          setRent(data.rent ?? '');
-          setManagementFee(data.management_fee ?? '');
-          setParkingNumber(data.parking_number || '');
-          setIsEvacuated(!!data.is_evacuated);
-          setIsRepaired(!!data.is_repaired);
-          setIsCleaned(!!data.is_cleaned);
-          setGuarantorCompany(data.guarantor_company || '');
-          setRemarks(data.remarks || '');
+          const roomRow = data as any;
+          setRoomNumber(roomRow.heya_name || '');
+          setStatus((roomRow.heya_status as RoomStatus) || ROOM_STATUS.VACANT);
+          setLayout(roomRow.layout || '');
+          setRent(roomRow.rent ?? '');
+          setOtherFee(roomRow.other_fee ?? '');
+          setGuarantorCompany(roomRow.guarantee_company || '');
         }
       } catch (err) {
         console.error('部屋データ取得エラー:', err);
@@ -96,32 +90,53 @@ function HeyaTourokuForm() {
     setIsSubmitting(true);
     setErrorMsg('');
 
-    const roomPayload = {
+    let roomPayload: any = {
       bukken_id: Number(propertyId),
-      room_number: trimmedRoomNumber,
-      status: status,
+      heya_name: trimmedRoomNumber,
+      heya_status: status,
       layout: layout || null,
       rent: rent === '' ? 0 : Number(rent),
-      management_fee: managementFee === '' ? 0 : Number(managementFee),
-      parking_number: parkingNumber || null,
-      is_evacuated: isEvacuated,
-      is_repaired: isRepaired,
-      is_cleaned: isCleaned,
-      guarantor_company: guarantorCompany || null,
-      remarks: remarks || null,
+      other_fee: otherFee === '' ? 0 : Number(otherFee),
+      guarantee_company: guarantorCompany || null,
     };
 
     try {
       if (isEditMode) {
         const { error } = await supabase
-          .from('M030_Room')
+          .from('m300_heya')
           .update(roomPayload)
-          .eq('id', roomId);
+          .eq('heya_id', Number(roomId));
 
         if (error) throw error;
       } else {
+        const { data: bukkenData, error: bukkenError } = await supabase
+          .from('m200_basebukken')
+          .select('soshiki_id')
+          .eq('bukken_id', Number(propertyId))
+          .single();
+
+        if (bukkenError || !bukkenData) {
+          throw bukkenError || new Error('物件情報が取得できませんでした。');
+        }
+
+        const { data: lastHeya, error: heyaError } = await supabase
+          .from('m300_heya')
+          .select('heya_id')
+          .eq('bukken_id', Number(propertyId))
+          .order('heya_id', { ascending: false })
+          .limit(1);
+
+        if (heyaError) throw heyaError;
+
+        const nextHeyaId = (lastHeya?.[0]?.heya_id ?? 0) + 1;
+        roomPayload = {
+          ...roomPayload,
+          heya_id: nextHeyaId,
+          soshiki_id: bukkenData.soshiki_id,
+        };
+
         const { error } = await supabase
-          .from('M030_Room')
+          .from('m300_heya')
           .insert([roomPayload]);
 
         if (error) throw error;
@@ -147,9 +162,9 @@ function HeyaTourokuForm() {
 
     try {
       const { error } = await supabase
-        .from('M030_Room')
+        .from('m300_heya')
         .delete()
-        .eq('id', roomId);
+        .eq('heya_id', Number(roomId));
 
       if (error) throw error;
 
@@ -231,11 +246,11 @@ function HeyaTourokuForm() {
             <select
               className="w-full border-2 border-slate-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500 bg-white font-bold text-slate-900 transition"
               value={status}
-              onChange={(e) => setStatus(e.target.value as RoomStatus)}
+              onChange={(e) => setStatus(Number(e.target.value) as RoomStatus)}
             >
               {ROOM_STATUS_LIST.map((st) => (
                 <option key={st} value={st}>
-                  {st}
+                  {ROOM_STATUS_LABELS[st] ?? String(st)}
                 </option>
               ))}
             </select>
@@ -272,9 +287,9 @@ function HeyaTourokuForm() {
             </div>
           </div>
 
-          {/* 管理費・共益費 */}
+          {/* その他費用 */}
           <div>
-            <label className="block text-sm font-bold text-slate-950 mb-1.5">管理費・共益費</label>
+            <label className="block text-sm font-bold text-slate-950 mb-1.5">その他費用</label>
             <div className="relative">
               <input
                 type="number"
@@ -282,63 +297,14 @@ function HeyaTourokuForm() {
                 min={0}
                 placeholder="例: 3000"
                 className="w-full border-2 border-slate-300 rounded pl-3 pr-8 py-1.5 text-sm focus:outline-none focus:border-emerald-500 bg-white font-bold text-right text-slate-900 transition"
-                value={managementFee}
-                onChange={(e) => setManagementFee(e.target.value === '' ? '' : Number(e.target.value))}
+                value={otherFee}
+                onChange={(e) => setOtherFee(e.target.value === '' ? '' : Number(e.target.value))}
               />
               <span className="absolute right-3 top-2 text-xs font-bold text-slate-500">円</span>
             </div>
           </div>
 
-          {/* 駐車場区画番号 */}
-          <div>
-            <label className="block text-sm font-bold text-slate-950 mb-1.5">契約駐車場 番号</label>
-            <input
-              type="text"
-              placeholder="例: 5番, なし"
-              className="w-full border-2 border-slate-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500 bg-white font-bold text-slate-900 transition"
-              value={parkingNumber}
-              onChange={(e) => setParkingNumber(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* 🛠️ 退去・原状回復チェック状況 */}
-        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-          <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-3 flex items-center space-x-1">
-            <Info className="h-3.5 w-3.5 text-slate-400" />
-            <span>退去・原状回復 進捗ステータス (空室・準備中用)</span>
-          </label>
-          <div className="flex flex-wrap gap-6">
-            <label className="flex items-center space-x-2 cursor-pointer select-none text-sm font-bold text-slate-900">
-              <input
-                type="checkbox"
-                className="h-5 w-5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 accent-emerald-600"
-                checked={isEvacuated}
-                onChange={(e) => setIsEvacuated(e.target.checked)}
-              />
-              <span>退去手続き・明渡し完了</span>
-            </label>
-
-            <label className="flex items-center space-x-2 cursor-pointer select-none text-sm font-bold text-slate-900">
-              <input
-                type="checkbox"
-                className="h-5 w-5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 accent-emerald-600"
-                checked={isRepaired}
-                onChange={(e) => setIsRepaired(e.target.checked)}
-              />
-              <span>室内修繕・内装工事完了</span>
-            </label>
-
-            <label className="flex items-center space-x-2 cursor-pointer select-none text-sm font-bold text-slate-900">
-              <input
-                type="checkbox"
-                className="h-5 w-5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 accent-emerald-600"
-                checked={isCleaned}
-                onChange={(e) => setIsCleaned(e.target.checked)}
-              />
-              <span>ハウスクリーニング完了</span>
-            </label>
-          </div>
+          <div />
         </div>
 
         {/* 保証会社 */}
@@ -350,18 +316,6 @@ function HeyaTourokuForm() {
             className="w-full border-2 border-slate-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500 bg-white font-bold text-slate-900 transition"
             value={guarantorCompany}
             onChange={(e) => setGuarantorCompany(e.target.value)}
-          />
-        </div>
-
-        {/* 備考欄 */}
-        <div>
-          <label className="block text-sm font-bold text-slate-950 mb-1.5">部屋特記事項・備考</label>
-          <textarea
-            rows={3}
-            placeholder="例: ペット飼育可条件、エアコン2025年交換済み、日当たり良好など..."
-            className="w-full border-2 border-slate-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500 bg-white font-medium text-slate-900 transition"
-            value={remarks}
-            onChange={(e) => setRemarks(e.target.value)}
           />
         </div>
 
