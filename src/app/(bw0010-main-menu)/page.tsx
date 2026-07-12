@@ -7,6 +7,7 @@ import { ROUTES, ROOM_STATUS, TAIOU_STATUS } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 import { useAuth } from '../context/AuthContext';
 
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [vacantCount, setVacantCount] = useState<number | null>(null);
