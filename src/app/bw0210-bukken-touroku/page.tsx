@@ -4,7 +4,7 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { ArrowLeft, Save, Loader2, AlertCircle, Building2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ROUTES, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, MANAGEMENT_TYPES, MANAGEMENT_TYPE_LABELS } from '../../constants/index';
+import { ROUTES, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, KANRI_KBN, KANRI_KBN_LABELS } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 // useSearchParams を使うためフォーム本体を分離（Suspenseでラップする）
@@ -17,7 +17,7 @@ function BukkenTourokuForm() {
   const [name, setName] = useState('');
   const [type, setType] = useState<string>(PROPERTY_TYPES.MANSION.toString());
   const [address, setAddress] = useState('');
-  const [managementType, setManagementType] = useState<string>(MANAGEMENT_TYPES.JISHA.toString());
+  const [managementType, setManagementType] = useState<string>(KANRI_KBN.JISHA.toString());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialLoading, setInitialLoading] = useState(isEditMode); // 編集時のみ既存データ待ち
   const [errorMsg, setErrorMsg] = useState('');
@@ -40,7 +40,7 @@ function BukkenTourokuForm() {
           setName(data.bukken_name || '');
           setType(data.bukken_type?.toString() || PROPERTY_TYPES.MANSION.toString());
           setAddress(data.address || '');
-          setManagementType(data.kanri_kbn?.toString() || MANAGEMENT_TYPES.JISHA.toString());
+          setManagementType(data.kanri_kbn?.toString() || KANRI_KBN.JISHA.toString());
         }
       } catch (err) {
         console.error('物件データ取得エラー:', err);
@@ -97,6 +97,30 @@ function BukkenTourokuForm() {
       console.error('物件保存エラー:', error);
       // 入力内容は保持したままエラーを画面内に表示（やり直しできる）
       setErrorMsg('保存に失敗しました。通信環境を確認して、もう一度お試しください。');
+      setIsSubmitting(false);
+    }
+  };
+
+  // 削除処理の追加
+  const handleDelete = async () => {
+    if (!confirm('この物件を削除しますか？\n（紐づく情報も非表示になります）')) return;
+
+    setIsSubmitting(true);
+    setErrorMsg('');
+
+    try {
+      const { error } = await supabase
+        .from('m200_basebukken')
+        .update({ mukou_kbn: 0 }) // 論理削除：mukou_kbnを0にする
+        .eq('bukken_id', Number(editId));
+      
+      if (error) throw error;
+
+      router.push(ROUTES.BUKKEN_ICHIRAN.path);
+      router.refresh();
+    } catch (error) {
+      console.error('物件削除エラー:', error);
+      setErrorMsg('削除に失敗しました。');
       setIsSubmitting(false);
     }
   };
@@ -167,7 +191,7 @@ function BukkenTourokuForm() {
               value={managementType}
               onChange={(e) => setManagementType(e.target.value)}
             >
-              {Object.entries(MANAGEMENT_TYPE_LABELS).map(([key, label]) => (
+              {Object.entries(KANRI_KBN_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
                 </option>
@@ -187,16 +211,28 @@ function BukkenTourokuForm() {
             />
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-slate-200">
+          <div className="flex justify-between pt-4 border-t border-slate-200">
+            {/* 削除ボタン（編集時のみ表示） */}
+            {isEditMode && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isSubmitting}
+                className="bg-red-50 hover:bg-red-100 text-red-600 px-5 py-2.5 rounded-lg text-sm font-bold border border-red-200 transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                削除
+              </button>
+            )}
+
             <button
               type="submit"
               disabled={isSubmitting || initialLoading}
-              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center space-x-1 transition shadow-sm cursor-pointer disabled:opacity-50"
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center space-x-1 transition shadow-sm cursor-pointer disabled:opacity-50 ml-auto"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>保存中...</span>
+                  <span>処理中...</span>
                 </>
               ) : (
                 <>
@@ -206,7 +242,6 @@ function BukkenTourokuForm() {
               )}
             </button>
           </div>
-
         </form>
 
       </div>

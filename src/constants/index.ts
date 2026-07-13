@@ -13,6 +13,12 @@ export const ROUTES = {
 // --- 2. DBのコード値定義（kubun_idのint型化に対応） ---
 
 // 物件種別 (kubun_type: '010')
+export const MUKOU_KBN = {
+  無効: 0,
+  有効: 1,
+} as const;
+
+// 物件種別 (kubun_type: '010')
 export const PROPERTY_TYPES = {
   MANSION: 1,   // 'マンション'
   APARTMENT: 2, // 'アパート'
@@ -22,7 +28,7 @@ export const PROPERTY_TYPES = {
 } as const;
 
 // 管理区分 (kubun_type: '020')
-export const MANAGEMENT_TYPES = {
+export const KANRI_KBN = {
   JISHA: 1, // '自社'
   KANRI: 2, // '管理'
 } as const;
@@ -67,9 +73,9 @@ export const PROPERTY_TYPE_LABELS: Record<number, string> = {
   [PROPERTY_TYPES.LAND]: '土地',
 };
 
-export const MANAGEMENT_TYPE_LABELS: Record<number, string> = {
-  [MANAGEMENT_TYPES.JISHA]: '自社',
-  [MANAGEMENT_TYPES.KANRI]: '管理',
+export const KANRI_KBN_LABELS: Record<number, string> = {
+  [KANRI_KBN.JISHA]: '自社',
+  [KANRI_KBN.KANRI]: '管理',
 };
 
 export const ROOM_STATUS_LABELS: Record<number, string> = {

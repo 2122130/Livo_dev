@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [vacantCount, setVacantCount] = useState<number | null>(null);
+  const [akishitsuCount, setakishitsuCount] = useState<number | null>(null);
   const [mitaiouCount, setMitaiouCount] = useState<number | null>(null);
   const [today, setToday] = useState('');
 
@@ -22,7 +22,7 @@ export default function Dashboard() {
     let cancelled = false;
     async function fetchCounts() {
       try {
-        const [vacantRes, mitaiouRes] = await Promise.all([
+        const [akishitsuRes, mitaiouRes] = await Promise.all([
           supabase
             .from('m300_heya')
             .select('heya_id', { count: 'exact', head: true })
@@ -36,7 +36,7 @@ export default function Dashboard() {
             .eq('support_status', TAIOU_STATUS.MITAIOU),
         ]);
         if (cancelled) return;
-        if (typeof vacantRes.count === 'number') setVacantCount(vacantRes.count);
+        if (typeof akishitsuRes.count === 'number') setakishitsuCount(akishitsuRes.count);
         if (typeof mitaiouRes.count === 'number') setMitaiouCount(mitaiouRes.count);
       } catch (err) {
         console.error('件数取得エラー:', err);
@@ -103,7 +103,7 @@ export default function Dashboard() {
           <div className="min-w-0">
             <span className="panel-title">空き物件管理</span>
             <span className="panel-desc">全物件の空室・募集状況の確認</span>
-            <div className="mt-2">{renderCountBadge(vacantCount, '戸', false)}</div>
+            <div className="mt-2">{renderCountBadge(akishitsuCount, '戸', false)}</div>
           </div>
           <div className="panel-icon-wrapper">
             <Key className="h-6 w-6 sm:h-7 sm:w-7" />
@@ -146,10 +146,6 @@ export default function Dashboard() {
           <Link href={ROUTES.BUKKEN_TOUROKU.path} className="quick-action">
             <Plus className="h-4 w-4" />
             <span>新規物件登録</span>
-          </Link>
-          <Link href={`${ROUTES.HEYA_ICHIRAN.path}?status=空室`} className="quick-action">
-            <Key className="h-4 w-4" />
-            <span>空室だけ見る</span>
           </Link>
         </div>
       </div>

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState, Suspense } from 'reac
 import { ArrowLeft, Building2, Plus, DoorOpen, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ROUTES, ROOM_STATUS, ROOM_STATUS_LABELS } from '../../constants/index';
+import { ROUTES, ROOM_STATUS, ROOM_STATUS_LIST, ROOM_STATUS_LABELS, PROPERTY_TYPE_LABELS, KANRI_KBN_LABELS } from '../../constants/index';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../../utils/supabase';
 
@@ -13,6 +13,7 @@ interface Property {
   bukken_id: number;        // 物件ID
   bukken_name?: string | null;      // 物件名
   bukken_type?: number | null;      // 物件種別（M010_Commonと連動）
+  kanri_kbn?: number | null;
   address?: string | null;          // 住所
   management_type?: number | null;  // 管理種別
   // 必要に応じて計算用フィールドを追加
@@ -73,6 +74,7 @@ function HeyaIchiranContent() {
   const [activeTab, setActiveTab] = useState<string>(initialStatus || 'すべて');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [activeStatus, setActiveStatus] = useState<number | null>(null);
 
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -99,7 +101,16 @@ function HeyaIchiranContent() {
     setLoading(true);
     setLoadError(false);
     try {
-      setActiveTab(initialStatus || 'すべて');
+      const statusParam = searchParams.get('status');
+      
+      if (statusParam) {
+        const entry = Object.entries(ROOM_STATUS_LABELS).find(([_, label]) => label === statusParam);
+        if (entry) {
+          setActiveStatus(Number(entry[0])); // 数値に変換してセット
+        }
+      } else {
+        setActiveStatus(null); // 指定がなければすべて
+      }
 
       if (bukkenId) {
         // 【パターンA】特定の物件が指定されている場合（物件情報と部屋を並列取得）
@@ -136,7 +147,7 @@ function HeyaIchiranContent() {
     } finally {
       setLoading(false);
     }
-  }, [bukkenId, initialStatus, user]);
+  }, [bukkenId, searchParams, user]);
  
   useEffect(() => {
     if (!user) return;
@@ -148,8 +159,9 @@ function HeyaIchiranContent() {
  
   // タブ絞り込み＋ソート（派生値として計算し、再レンダーとカクつきを減らす）
   const filteredRooms = useMemo(() => {
-    const statusFilter = activeTab === 'すべて' ? null : STATUS_TAB_MAP[activeTab];
-    const result = statusFilter === null ? [...rooms] : rooms.filter(room => room.heya_status === statusFilter);
+    const result = activeStatus === null 
+      ? [...rooms] 
+      : rooms.filter(room => room.heya_status === activeStatus);
 
     if (sortKey) {
       result.sort((a, b) => {
@@ -178,7 +190,7 @@ function HeyaIchiranContent() {
     }
 
     return result;
-  }, [activeTab, rooms, sortKey, sortOrder]);
+  }, [activeStatus, rooms, sortKey, sortOrder]);
 
   const handleTabChange = (statusTab: string) => {
     setActiveTab(statusTab);
@@ -262,7 +274,15 @@ function HeyaIchiranContent() {
                 <div className="h-5 bg-slate-200 rounded w-32 animate-pulse" />
               ) : (
                 <span className="font-bold text-slate-800">
-                  {property?.bukken_type || '—'} ／ {property?.management_type || '—'}
+                  {/* 物件種別の変換 */}
+                  {(property?.bukken_type !== null && property?.bukken_type !== undefined && PROPERTY_TYPE_LABELS[property.bukken_type])
+                    ? PROPERTY_TYPE_LABELS[property.bukken_type]
+                    : '—'} 
+                  {' ／ '}
+                  {/* 管理区分の変換 */}
+                  {(property?.kanri_kbn !== null && property?.kanri_kbn !== undefined && KANRI_KBN_LABELS[property.kanri_kbn])
+                    ? KANRI_KBN_LABELS[property.kanri_kbn]
+                    : '—'}
                 </span>
               )}
             </div>
@@ -290,15 +310,24 @@ function HeyaIchiranContent() {
 
         {/* 絞り込みタブ（スマホは横スクロール可、スクロールバー非表示） */}
         <div className="flex overflow-x-auto no-scrollbar border-b border-slate-200 text-sm font-bold bg-slate-50/50 p-1 rounded-t-md border-t border-x shrink-0">
-          {STATUS_TABS.map((tab) => (
+          <button
+            onClick={() => setActiveStatus(null)}
+            className={`px-4 py-2 md:py-1.5 text-xs rounded transition mr-1 cursor-pointer font-extrabold whitespace-nowrap ${
+              activeStatus === null ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            すべて ({rooms.length})
+          </button>
+          
+          {ROOM_STATUS_LIST.map((status) => (
             <button
-              key={tab}
-              onClick={() => handleTabChange(tab)}
-              className={`px-4 py-2 md:py-1.5 text-xs rounded transition mr-1 cursor-pointer font-extrabold whitespace-nowrap shrink-0 ${
-                activeTab === tab ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+              key={status}
+              onClick={() => setActiveStatus(status)}
+              className={`px-4 py-2 md:py-1.5 text-xs rounded transition mr-1 cursor-pointer font-extrabold whitespace-nowrap ${
+                activeStatus === status ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {tab}{!loading && ` (${tab === 'すべて' ? rooms.length : rooms.filter(r => r.heya_status === STATUS_TAB_MAP[tab]).length})`}
+              {ROOM_STATUS_LABELS[status]} ({rooms.filter(r => r.heya_status === status).length})
             </button>
           ))}
         </div>

@@ -105,7 +105,6 @@ export default function Login() {
                 value={loginId}
                 onChange={(e) => setLoginId(e.target.value)}
                 disabled={loading}
-                // 🌟 Enter でパスワード欄へフォーカス移動
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -122,12 +121,11 @@ export default function Login() {
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input
-                ref={passwordInputRef} // 🌟 refを設定
+                ref={passwordInputRef}
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
-                // 🌟 Enter でボタンへフォーカス移動
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -136,12 +134,23 @@ export default function Login() {
                 }}
                 className="w-full pl-9 pr-10 py-2.5 bg-white border border-slate-300 rounded-lg text-sm"
               />
-              {/* ... 目アイコンのボタンはそのまま */}
+              {/* 🌟 パスワード表示切替ボタン */}
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <Eye className="h-4 w-4" />
+                ) : (
+                  <EyeOff className="h-4 w-4" />
+                )}
+              </button>
             </div>
           </div>
 
           <button
-            ref={loginButtonRef} // 🌟 refを設定
+            ref={loginButtonRef}
             type="submit"
             disabled={loading}
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg text-sm font-bold transition"

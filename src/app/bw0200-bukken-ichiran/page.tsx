@@ -5,7 +5,7 @@ import { Search, Plus, Building2, MapPin, SlidersHorizontal, Layers, X, ArrowUpD
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
-import { ROUTES, ROOM_STATUS, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, MANAGEMENT_TYPES, MANAGEMENT_TYPE_LABELS } from '../../constants/index';
+import { ROUTES, MUKOU_KBN, ROOM_STATUS, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, KANRI_KBN, KANRI_KBN_LABELS } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 interface Property {
@@ -15,10 +15,10 @@ interface Property {
   address: string | null;
   kanri_kbn: number | null;
   total_rooms?: number;
-  vacant_rooms?: number;
+  akishitsu_rooms?: number;
 }
 
-type SortKey = 'bukken_name' | 'bukken_type' | 'kanri_kbn' | 'vacant_rooms' | 'address';
+type SortKey = 'bukken_name' | 'bukken_type' | 'kanri_kbn' | 'akishitsu_rooms' | 'address';
 type SortOrder = 'asc' | 'desc';
 
 export default function BukkenIchiran() {
@@ -48,13 +48,18 @@ export default function BukkenIchiran() {
         supabase
           .from('m200_basebukken')
           .select('*')
+          .eq('mukou_kbn', MUKOU_KBN.有効)
           .eq('soshiki_id', user.soshiki_id)
           .order('bukken_id', { ascending: true }),
         supabase
           .from('m300_heya')
           .select('bukken_id, heya_status')
+          .eq('mukou_kbn', MUKOU_KBN.有効)
           .eq('soshiki_id', user.soshiki_id),
       ]);
+
+      console.log("取得した物件データ:", bukkenRes.data);
+      console.log("取得した部屋データ:", heyaRes.data);
 
       if (bukkenRes.error) throw bukkenRes.error;
       if (heyaRes.error) throw heyaRes.error;
@@ -71,7 +76,7 @@ export default function BukkenIchiran() {
       const updatedProperties: Property[] = (bukkenRes.data || []).map(prop => ({
         ...prop,
         total_rooms: countMap.get(prop.bukken_id)?.total ?? 0,
-        vacant_rooms: countMap.get(prop.bukken_id)?.vacant ?? 0,
+        akishitsu_rooms: countMap.get(prop.bukken_id)?.vacant ?? 0,
       }));
 
       setProperties(updatedProperties);
@@ -244,8 +249,8 @@ export default function BukkenIchiran() {
               className="w-full px-3 py-2 md:py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-950 font-bold focus:outline-none focus:border-emerald-500 transition"
             >
               <option value="all">すべて</option>
-              <option value={MANAGEMENT_TYPES.JISHA}>自社</option>
-              <option value={MANAGEMENT_TYPES.KANRI}>管理</option>
+              <option value={KANRI_KBN.JISHA}>自社</option>
+              <option value={KANRI_KBN.KANRI}>管理</option>
             </select>
           </div>
         </div>
@@ -292,7 +297,7 @@ export default function BukkenIchiran() {
                       {prop.bukken_type !== null ? PROPERTY_TYPE_LABELS[prop.bukken_type] : '未設定'}
                     </span>
                     <span className="text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded">
-                      {prop.kanri_kbn !== null ? MANAGEMENT_TYPE_LABELS[prop.kanri_kbn] : '未設定'}
+                      {prop.kanri_kbn !== null ? KANRI_KBN_LABELS[prop.kanri_kbn] : '未設定'}
                     </span>
                   </div>
                   {prop.address && (
@@ -305,7 +310,7 @@ export default function BukkenIchiran() {
                 <div className="text-right shrink-0 flex flex-col items-end">
                   <span className="text-[10px] font-bold text-slate-400">空室 / 総戸数</span>
                   <span className="leading-none mt-0.5">
-                    <span className="text-emerald-600 font-extrabold text-2xl">{prop.vacant_rooms ?? 0}</span>
+                    <span className="text-emerald-600 font-extrabold text-2xl">{prop.akishitsu_rooms ?? 0}</span>
                     <span className="text-slate-400 text-sm font-bold"> / {prop.total_rooms ?? 0}</span>
                   </span>
                   <Link
@@ -357,10 +362,10 @@ export default function BukkenIchiran() {
                     {renderSortIcon('kanri_kbn')}
                   </div>
                 </th>
-                <th onClick={() => handleSort('vacant_rooms')} className="px-4 py-3 w-36 cursor-pointer hover:bg-slate-200 transition group/th">
+                <th onClick={() => handleSort('akishitsu_rooms')} className="px-4 py-3 w-36 cursor-pointer hover:bg-slate-200 transition group/th">
                   <div className="flex items-center justify-center">
                     <span>空室 / 総戸数</span>
-                    {renderSortIcon('vacant_rooms')}
+                    {renderSortIcon('akishitsu_rooms')}
                   </div>
                 </th>
                 <th onClick={() => handleSort('address')} className="px-4 py-3 cursor-pointer hover:bg-slate-200 transition group/th">
@@ -415,11 +420,11 @@ export default function BukkenIchiran() {
                       {prop.bukken_type !== null ? PROPERTY_TYPE_LABELS[prop.bukken_type] : '未設定'}
                     </td>
                     <td className="px-4 py-3 font-bold text-slate-700">
-                      {prop.kanri_kbn !== null ? MANAGEMENT_TYPE_LABELS[prop.kanri_kbn] : '未設定'}
+                      {prop.kanri_kbn !== null ? KANRI_KBN_LABELS[prop.kanri_kbn] : '未設定'}
                     </td>
                     <td className="px-4 py-3 text-center font-bold text-slate-700">
                       <span className="text-emerald-600 font-extrabold text-base">
-                        {prop.vacant_rooms ?? 0}
+                        {prop.akishitsu_rooms ?? 0}
                       </span>
                       <span className="text-slate-400 mx-1 font-normal">/</span>
                       <span>{prop.total_rooms ?? 0} 戸</span>

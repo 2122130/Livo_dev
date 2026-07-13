@@ -4,16 +4,11 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { ArrowLeft, Save, Loader2, Trash2, FileText, Image as ImageIcon, AlertCircle, DoorOpen } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ROUTES, ROOM_STATUS, ROOM_STATUS_LIST } from '../../constants/index';
+import { ROUTES, MUKOU_KBN, ROOM_STATUS, ROOM_STATUS_LIST, ROOM_STATUS_LABELS } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 // ステータスの型定義を厳密に指定
 type RoomStatus = typeof ROOM_STATUS_LIST[number];
-const ROOM_STATUS_LABELS = {
-  1: '空室',
-  2: '入居中',
-  3: '準備中',
-} as const;
 
 // 1. useSearchParams を使用するフォームの本体コンポーネント
 function HeyaTourokuForm() {
@@ -51,6 +46,7 @@ function HeyaTourokuForm() {
         const { data, error } = await supabase
           .from('m300_heya')
           .select('*')
+          .eq('mukou_kbn', MUKOU_KBN.有効) // 有効な部屋のみ取得
           .eq('heya_id', Number(roomId))
           .single();
 
@@ -98,6 +94,7 @@ function HeyaTourokuForm() {
       rent: rent === '' ? 0 : Number(rent),
       other_fee: otherFee === '' ? 0 : Number(otherFee),
       guarantee_company: guarantorCompany || null,
+      mukou_kbn: MUKOU_KBN.有効,
     };
 
     try {
@@ -153,7 +150,9 @@ function HeyaTourokuForm() {
   // 削除処理
   const handleDelete = async () => {
     if (!isEditMode || !roomId) return;
-    if (!confirm(`「${roomNumber}号室」の情報を完全に削除しますか？\n削除したデータは元に戻せません。`)) return;
+    
+    // 論理削除である旨を確認メッセージに含める
+    if (!confirm(`「${roomNumber}号室」を削除（非表示）にしますか？\n（一覧から表示されなくなります）`)) return;
 
     setIsDeleting(true);
     setErrorMsg('');
@@ -161,7 +160,7 @@ function HeyaTourokuForm() {
     try {
       const { error } = await supabase
         .from('m300_heya')
-        .delete()
+        .update({ mukou_kbn: 0 }) // 論理削除：mukou_kbnを0に更新
         .eq('heya_id', Number(roomId));
 
       if (error) throw error;
@@ -169,7 +168,7 @@ function HeyaTourokuForm() {
       router.push(heyaIchiranPath);
     } catch (err) {
       console.error('削除エラー:', err);
-      setErrorMsg('データの削除に失敗しました。もう一度お試しください。');
+      setErrorMsg('削除に失敗しました。もう一度お試しください。');
       setIsDeleting(false);
     }
   };
@@ -184,27 +183,11 @@ function HeyaTourokuForm() {
             <ArrowLeft className="h-4 w-4" />
             <span>戻る</span>
           </Link>
-
           <h2 className="text-base sm:text-lg font-extrabold border-l-4 border-emerald-600 pl-2 sm:pl-3 text-slate-950 flex items-center space-x-1.5 whitespace-nowrap">
             <DoorOpen className="h-5 w-5 text-emerald-600 shrink-0" />
             <span>{isEditMode ? '部屋情報編集' : '部屋情報登録'}</span>
           </h2>
-          <span className="text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold truncate max-w-[40vw]">
-            {propertyName}
-          </span>
         </div>
-
-        {isEditMode && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={isDeleting || isSubmitting || initialLoading}
-            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-3 py-1.5 rounded text-xs font-bold flex items-center space-x-1 transition shadow-sm cursor-pointer disabled:opacity-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>{isDeleting ? '削除中...' : 'この部屋を削除'}</span>
-          </button>
-        )}
       </div>
 
       {/* エラーバナー（alertの代わりに画面内で通知し、入力を失わせない） */}
@@ -220,6 +203,15 @@ function HeyaTourokuForm() {
         onSubmit={handleSubmit}
         className={`bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-slate-200 space-y-5 sm:space-y-6 transition-opacity ${initialLoading ? 'opacity-50 pointer-events-none' : ''}`}
       >
+        <div>
+          <label className="block text-sm font-bold text-slate-500 mb-1.5">対象物件</label>
+          <input
+            type="text"
+            readOnly
+            className="w-full border border-slate-200 rounded px-3 py-1.5 text-sm bg-slate-50 font-bold text-slate-600 cursor-not-allowed"
+            value={propertyName}
+          />
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
           {/* 部屋番号 */}
@@ -342,11 +334,26 @@ function HeyaTourokuForm() {
         </div>
 
         {/* 💾 アクションボタン */}
-        <div className="flex justify-end pt-4 border-t border-slate-200">
+        <div className="flex justify-between pt-4 border-t border-slate-200">
+          
+          {/* 削除ボタン（左寄せ） */}
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isSubmitting || isDeleting || initialLoading}
+              className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-5 py-2.5 rounded-lg text-sm font-bold flex items-center space-x-1 transition shadow-sm cursor-pointer disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+              <span>{isDeleting ? '削除中...' : '削除'}</span>
+            </button>
+          )}
+          
+          {/* 保存ボタン（ml-auto で強制的に右寄せ） */}
           <button
             type="submit"
             disabled={isSubmitting || isDeleting || initialLoading}
-            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center space-x-1 transition shadow-sm cursor-pointer disabled:opacity-50"
+            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center space-x-1 transition shadow-sm cursor-pointer disabled:opacity-50 ml-auto"
           >
             {isSubmitting ? (
               <>
@@ -361,7 +368,6 @@ function HeyaTourokuForm() {
             )}
           </button>
         </div>
-
       </form>
     </main>
   );

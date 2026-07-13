@@ -55,8 +55,8 @@ export default function TaiouIchiran() {
     try {
       const [histRes, bukkenRes, roomRes] = await Promise.all([
         supabase.from('t300_taioulog').select('*'),
-        supabase.from('M020_Bukken').select('id, name'),
-        supabase.from('M030_Room').select('id, bukken_id, room_number')
+        supabase.from('m200_basebukken').select('id, name'),
+        supabase.from('m300_heya').select('id, bukken_id, room_number')
       ]);
 
       if (histRes.error) throw histRes.error;
