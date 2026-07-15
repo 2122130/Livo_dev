@@ -5,15 +5,20 @@ import { Search, Plus, Building2, MapPin, SlidersHorizontal, Layers, X, ArrowUpD
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
-import { ROUTES, MUKOU_KBN, ROOM_STATUS, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, KANRI_KBN, KANRI_KBN_LABELS } from '../../constants/index';
+import { ROUTES, MUKOU_KBN, ROOM_STATUS, PROPERTY_TYPES, PROPERTY_TYPE_LABELS, KANRI_KBN, KANRI_KBN_LABELS, BUKKENTAB_CATEGORIES, BUKKENTAB_CONFIG } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
 
 interface Property {
+  soshiki_id: number;
   bukken_id: number;
   bukken_name: string;
   bukken_type: number | null;
-  address: string | null;
   kanri_kbn: number | null;
+  bukken_age: number | null;
+  address: string | null;
+  rent_flg: boolean | null;
+  sale_flg: boolean | null;
+  sunlight_flg: boolean | null;
   total_rooms?: number;
   akishitsu_rooms?: number;
 }
@@ -26,6 +31,9 @@ export default function BukkenIchiran() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+
+  // タブ切り替え
+  const [activeTab, setActiveTab] = useState<number>(BUKKENTAB_CATEGORIES.RENT);
 
   // 検索・絞り込み用状態（定数の数値に合わせるため初期値は文字列 'all'）
   const [searchKeyword, setSearchKeyword] = useState('');
@@ -100,6 +108,15 @@ export default function BukkenIchiran() {
   const filteredProperties = useMemo(() => {
     let result = [...properties];
 
+    // 1. タブによるフラグ絞り込み
+    if (activeTab === BUKKENTAB_CATEGORIES.RENT) {
+      result = result.filter(p => p.rent_flg === true);
+    } else if (activeTab === BUKKENTAB_CATEGORIES.SALE) {
+      result = result.filter(p => p.sale_flg === true);
+    } else if (activeTab === BUKKENTAB_CATEGORIES.SUNLIGHT) {
+      result = result.filter(p => p.sunlight_flg === true);
+    }
+
     if (searchKeyword.trim() !== '') {
       const kw = searchKeyword.toLowerCase();
       result = result.filter(p =>
@@ -139,7 +156,7 @@ export default function BukkenIchiran() {
     }
 
     return result;
-  }, [searchKeyword, selectedType, selectedManagement, properties, sortKey, sortOrder]);
+  }, [searchKeyword, selectedType, selectedManagement, properties, sortKey, sortOrder, activeTab]);
 
   const handleClearFilters = () => {
     setSearchKeyword('');
@@ -190,6 +207,36 @@ export default function BukkenIchiran() {
           <Plus className="h-4 w-4" />
           <span>新規物件登録</span>
         </Link>
+      </div>
+
+      <div className="w-full">
+        <div className="flex w-full border-b border-slate-200">
+          {Object.values(BUKKENTAB_CATEGORIES).map((tabId) => {
+            const config = BUKKENTAB_CONFIG[tabId];
+            const isActive = activeTab === tabId;
+
+            return (
+              <button
+                key={tabId}
+                onClick={() => setActiveTab(tabId)}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-all duration-200 
+                  ${isActive 
+                    ? `text-${config.color}-600 border-${config.color}-600 bg-${config.color}-50` 
+                    : 'text-slate-500 hover:bg-slate-50 border-transparent'
+                  }`}
+              >
+                {config.label}
+              </button>
+            );
+          })}
+        </div>
+        
+        <div className="p-6 bg-white border-x border-b border-slate-200 rounded-b-xl">
+          {/* activeTab が 1, 2, 3 のいずれかなので分岐しやすい */}
+          {activeTab === BUKKENTAB_CATEGORIES.RENT && <div>賃貸リスト</div>}
+          {activeTab === BUKKENTAB_CATEGORIES.SALE && <div>売買リスト</div>}
+          {activeTab === BUKKENTAB_CATEGORIES.SUNLIGHT && <div>太陽光リスト</div>}
+        </div>
       </div>
 
       {/* 🔍 検索・絞り込みパネル */}

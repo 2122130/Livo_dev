@@ -10,6 +10,12 @@ export const ROUTES = {
   TAIOU_TOUROKU: { path: '/bw0510-taiou-touroku', title: '対応情報 登録' },
 } as const;
 
+export const BUKKENTAB_CATEGORIES = {
+  RENT: 1,
+  SALE: 2,
+  SUNLIGHT: 3,
+} as const;
+
 // --- 2. DBのコード値定義（kubun_idのint型化に対応） ---
 
 // 物件種別 (kubun_type: '010')
@@ -61,9 +67,12 @@ export const TAIOU_CATEGORY = {
   SONOTA: 9,  // 'その他'
 } as const;
 
-
-// --- 3. 【追加】画面表示用の日本語ラベル辞書 ---
-// これがあれば、Viewを作らなくてもDBの値から一発で日本語に変換できます！
+export type BukkenTabCategory = typeof BUKKENTAB_CATEGORIES[keyof typeof BUKKENTAB_CATEGORIES];
+export const BUKKENTAB_CONFIG: Record<BukkenTabCategory, { label: string, color: string }> = {
+  [BUKKENTAB_CATEGORIES.RENT]: { label: '賃貸', color: 'emerald' },
+  [BUKKENTAB_CATEGORIES.SALE]: { label: '売買', color: 'blue' },
+  [BUKKENTAB_CATEGORIES.SUNLIGHT]: { label: '太陽光', color: 'amber' },
+}
 
 export const PROPERTY_TYPE_LABELS: Record<number, string> = {
   [PROPERTY_TYPES.MANSION]: 'マンション',
