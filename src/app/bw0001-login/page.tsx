@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import { Building2, User, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { ROUTES } from '../../constants/index';
 import { supabase } from '../../utils/supabase';
@@ -9,8 +8,7 @@ import { useAuth } from '../context/AuthContext';
 
 
 export default function Login() {
-  const router = useRouter();
-  const { login } = useAuth(); 
+  const { login } = useAuth();
   
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
@@ -65,8 +63,11 @@ export default function Login() {
         kengen_kbn: matchedAccount.kengen_kbn
       });
 
-      router.push(ROUTES.MAIN_MENU.path);
-      
+      // 本番ビルドの router.push はクライアント側キャッシュを使うため、
+      // 直前に document.cookie でセットした認証Cookieをミドルウェアが
+      // 再評価せず遷移しないことがある。フルページ遷移で確実に通す。
+      window.location.href = ROUTES.MAIN_MENU.path;
+
     } catch (err) {
       console.error('ログイン処理エラー:', err);
       setErrorMsg('サーバーとの通信に失敗しました。');
